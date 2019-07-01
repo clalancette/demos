@@ -13,82 +13,111 @@
 # limitations under the License.
 
 import os
+import sys
+#import threading
 import unittest
 
 from launch import LaunchDescription
+from launch import LaunchService
 from launch.actions import ExecuteProcess
-from launch.actions import OpaqueFunction
-
-import launch_testing
-import launch_testing.asserts
-import launch_testing_ros
-
-
-def generate_test_description(ready_fn):
-    launch_description = LaunchDescription()
-
-    publisher_executable_args = ['-r', '1', '-s', '0', '-b', '-f', '5']
-    subscriber_executable_args = ['-r', '1', '-s', '0']
-
-    env = dict(os.environ)
-    env['PYTHONUNBUFFERED'] = '1'
-    env['OSPL_VERBOSITY'] = '8'  # 8 = OS_NONE
-    # bare minimum formatting for console output matching
-    env['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = '{message}'
-    env['RMW_IMPLEMENTATION'] = @rmw_implementation@
-
-    # Launch the process that will receive the images.
-    # This is the process that gets to decide when to tear the launcher down.
-    # It will exit when the regex for receiving images is matched.
-    showimage_executable = @RCLPY_DEMO_SHOWIMAGE_EXE@
-    showimage_name = 'test_showimage_py'
-
-    command = [showimage_executable]
-    command.extend(subscriber_executable_args)
-    showimage_process = ExecuteProcess(
-        cmd=command,
-        name=showimage_name,
-        env=env,
-        output='screen'
-    )
-    launch_description.add_action(showimage_process)
-
-    # Launch the process that will publish the images.
-    # This process will be exited when the launcher is torn down.
-    cam2image_executable = @RCLPY_DEMO_CAM2IMAGE_EXE@
-    cam2image_name = 'test_cam2image_py'
-
-    command = [cam2image_executable]
-    command.extend(publisher_executable_args)
-    cam2image_process = ExecuteProcess(
-        cmd=command,
-        name=cam2image_name,
-        env=env,
-        output='screen'
-    )
-    launch_description.add_action(cam2image_process)
-
-    launch_description.add_action(
-        OpaqueFunction(function=lambda context: ready_fn())
-    )
-
-    return launch_description, locals()
+from launch.actions import RegisterEventHandler
+from launch.event_handlers import OnProcessIO
 
 
 class TestExecutablesDemo(unittest.TestCase):
 
-    def test_reliable_qos(self, proc_output, showimage_process, cam2image_process):
-        """Test QoS settings for both processes work as expected."""
-        output_filter = launch_testing_ros.tools.basic_output_filter(
-            filtered_rmw_implementation=@rmw_implementation@
+    def __init__(self, name):
+        super().__init__(name)
+        self.ld = self.generate_launch_description()
+        self.ls = LaunchService()
+        self.ls.include_launch_description(self.ld)
+        # self.test_tr = threading.Thread(
+        #     target=self.run_test,
+        #     name='test_runner_thread',
+        #     daemon=True
+        # )
+        self.saw_cam2image_output = False
+        self.saw_showimage_output = False
+
+    def generate_launch_description(self):
+        launch_description = LaunchDescription()
+        publisher_executable_args = ['-r', '1', '-s', '0', '-b', '-f', '5']
+        subscriber_executable_args = ['-r', '1', '-s', '0']
+
+        env = dict(os.environ)
+        env['PYTHONUNBUFFERED'] = '1'
+        env['OSPL_VERBOSITY'] = '8'  # 8 = OS_NONE
+        # bare minimum formatting for console output matching
+        env['RCUTILS_CONSOLE_OUTPUT_FORMAT'] = '{message}'
+        env['RMW_IMPLEMENTATION'] = @rmw_implementation@
+
+        # Launch the process that will receive the images.
+        # This is the process that gets to decide when to tear the launcher down.
+        # It will exit when the regex for receiving images is matched.
+        showimage_executable = @RCLPY_DEMO_SHOWIMAGE_EXE@
+        showimage_name = 'test_showimage_py'
+
+        command = [showimage_executable]
+        command.extend(subscriber_executable_args)
+        showimage_process = ExecuteProcess(
+            cmd=command,
+            name=showimage_name,
+            env=env,
+            output='screen'
         )
-        proc_output.assertWaitFor(
-            expected_output=launch_testing.tools.expected_output_from_file(
-                path=@RCLPY_DEMO_SHOWIMAGE_OUTPUT@
-            ), process=showimage_process, output_filter=output_filter, timeout=10
+        launch_description.add_action(showimage_process)
+
+        # Launch the process that will publish the images.
+        # This process will be exited when the launcher is torn down.
+        cam2image_executable = @RCLPY_DEMO_CAM2IMAGE_EXE@
+        cam2image_name = 'test_cam2image_py'
+
+        command = [cam2image_executable]
+        command.extend(publisher_executable_args)
+        cam2image_process = ExecuteProcess(
+            cmd=command,
+            name=cam2image_name,
+            env=env,
+            output='screen'
         )
-        proc_output.assertWaitFor(
-            expected_output=launch_testing.tools.expected_output_from_file(
-                path=@RCLPY_DEMO_CAM2IMAGE_OUTPUT@
-            ), process=cam2image_process, output_filter=output_filter, timeout=10
+        launch_description.add_action(cam2image_process)
+
+        launch_description.add_action(
+            RegisterEventHandler(
+                OnProcessIO(
+                    on_stdout=self.append,
+                    on_stderr=self.append,
+                )
+            )
         )
+
+        return launch_description
+
+    def append(self, process_io):
+        with open('/tmp/append', 'a') as outfp:
+            outfp.write(process_io.text.decode())
+            outfp.write(process_io.process_name + '\n')
+
+        if 'cam2image' in process_io.process_name:
+            if 'Publishing image #' in process_io.text.decode():
+                self.saw_cam2image_output = True
+        elif 'showimage' in process_io.process_name:
+            if 'Received image #' in process_io.text.decode():
+                self.saw_showimage_output = True
+
+        if self.saw_cam2image_output and self.saw_showimage_output:
+            # We've seen all required arguments from the test, quit
+            with open('/tmp/append', 'a') as outfp:
+                outfp.write('Done!!!!!\n')
+            self.ls.shutdown()
+            sys.exit(0)
+
+    # def run_test(self):
+    #     try:
+    #         self.results = unittest.TextTestRunner(verbosity=2,resultclass=unittest.TextTestResult).run()
+    #     finally:
+    #         self.ls.shutdown()
+
+    def test_reliable_qos(self):
+        #self.test_tr.start()
+        self.ls.run()
