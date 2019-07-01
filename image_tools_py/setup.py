@@ -27,10 +27,12 @@ class custom_install_scripts(install_scripts):
         for rmw_impl in rmw_implementations:
             substs = {
                 '@rmw_implementation@': rmw_impl,
-                '@showimage_py_exe@': os.path.join(self.install_dir, 'showimage_py'),
-                '@showimage_py_outfile@': os.path.realpath(os.path.join('test', 'showimage_py')),
-                '@cam2image_py_exe@': os.path.join(self.install_dir, 'cam2image_py'),
-                '@cam2image_py_outfile@': os.path.realpath(os.path.join('test', 'cam2image_py')),
+                '@RCLPY_DEMO_SHOWIMAGE_EXE@': os.path.join(self.install_dir, 'showimage_py'),
+                '@RCLPY_DEMO_SHOWIMAGE_OUTPUT@': os.path.realpath(os.path.join('test',
+                                                                               'showimage_py')),
+                '@RCLPY_DEMO_CAM2IMAGE_EXE@': os.path.join(self.install_dir, 'cam2image_py'),
+                '@RCLPY_DEMO_CAM2IMAGE_OUTPUT@': os.path.realpath(os.path.join('test',
+                                                                               'cam2image_py')),
             }
 
             infile = os.path.join('test', 'test_showimage_cam2image.py.in')
