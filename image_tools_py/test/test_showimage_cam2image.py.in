@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import os
-import sys
-#import threading
 import unittest
 
 from launch import LaunchDescription
@@ -22,6 +20,7 @@ from launch import LaunchService
 from launch.actions import ExecuteProcess
 from launch.actions import RegisterEventHandler
 from launch.event_handlers import OnProcessIO
+from launch.events import Shutdown
 
 
 class TestExecutablesDemo(unittest.TestCase):
@@ -31,11 +30,6 @@ class TestExecutablesDemo(unittest.TestCase):
         self.ld = self.generate_launch_description()
         self.ls = LaunchService()
         self.ls.include_launch_description(self.ld)
-        # self.test_tr = threading.Thread(
-        #     target=self.run_test,
-        #     name='test_runner_thread',
-        #     daemon=True
-        # )
         self.saw_cam2image_output = False
         self.saw_showimage_output = False
 
@@ -109,15 +103,7 @@ class TestExecutablesDemo(unittest.TestCase):
             # We've seen all required arguments from the test, quit
             with open('/tmp/append', 'a') as outfp:
                 outfp.write('Done!!!!!\n')
-            self.ls.shutdown()
-            sys.exit(0)
-
-    # def run_test(self):
-    #     try:
-    #         self.results = unittest.TextTestRunner(verbosity=2,resultclass=unittest.TextTestResult).run()
-    #     finally:
-    #         self.ls.shutdown()
+            self.ls.emit_event_sync(Shutdown(reason='foo', due_to_sigint=False))
 
     def test_reliable_qos(self):
-        #self.test_tr.start()
         self.ls.run()
