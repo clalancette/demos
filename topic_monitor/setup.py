@@ -4,6 +4,8 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
+import fastentrypoints
+
 package_name = 'topic_monitor'
 
 setup(

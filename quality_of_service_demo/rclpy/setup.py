@@ -1,5 +1,7 @@
 from setuptools import setup
 
+import fastentrypoints
+
 package_name = 'quality_of_service_demo_py'
 
 setup(
